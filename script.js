@@ -1,6 +1,7 @@
 "use strict";
 (() => {
   const STORAGE_KEY = "mrs-garagara-pon-v1";
+  const VIEW_SETTINGS_KEY = "mrs-garagara-pon-view-settings-v1";
   const COLORS = [
     ["red", "赤", "#ed605b"], ["yellow", "黄", "#f3c64c"],
     ["blue", "青", "#609cea"], ["green", "緑", "#6dbb8d"],
@@ -46,9 +47,22 @@
     return freshState();
   }
   let state = loadState();
+  let resultDismissed = false;
+  let resultShownAt = null;
+  function loadViewSettings() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(VIEW_SETTINGS_KEY));
+      return {showRemaining: typeof saved?.showRemaining === "boolean" ? saved.showRemaining : true, showHistory: typeof saved?.showHistory === "boolean" ? saved.showHistory : true};
+    } catch { return {showRemaining: true, showHistory: true}; }
+  }
+  let {showRemaining, showHistory} = loadViewSettings();
+  function saveViewSettings() {
+    try { localStorage.setItem(VIEW_SETTINGS_KEY, JSON.stringify({showRemaining, showHistory})); }
+    catch { storageNotice("表示設定を保存できませんでした。再読み込み後に引き継げない場合があります。"); }
+  }
   let machine = null;
   let machinePending = true;
-  import('./machine-3d.js?v=5').then(({createMachine}) => {
+  import('./machine-3d.js?v=9').then(({createMachine}) => {
     machine = createMachine($("#machine-stage"));
     machinePending = false;
     render();
@@ -70,7 +84,8 @@
     return element;
   }
   function showResult() {
-    const latest = state.history[0];
+    const latest = resultDismissed ? null : state.history[0];
+    if (latest && resultShownAt === null) resultShownAt = performance.now();
     $("#result-text").textContent = latest ? `${colorInfo(latest.color)[1]}・${latest.name}` : "";
     $("#result-text").classList.toggle("has-result", !!latest);
     machine?.setResult(latest ? colorInfo(latest.color)[2] : null);
@@ -80,6 +95,9 @@
   function render() {
     const total = totalRemaining();
     $("#total-remaining").textContent = total.toLocaleString("ja-JP");
+    $("#remaining-button").hidden = !showRemaining;
+    $("#remaining-button").disabled = busy;
+    $("#remaining-button").setAttribute("aria-label", `残り${total.toLocaleString("ja-JP")}玉。賞ごとの残数を表示`);
     $("#spin-button").disabled = busy || !total || stale || !machine;
     const spinLabel = busy ? "抽選中" : machinePending ? "3D表示を準備中" : !machine ? "3D表示を利用できません" : total ? "抽選をスタート" : "すべての玉が出ました";
     $("#spin-button").setAttribute("aria-label", spinLabel);
@@ -87,15 +105,30 @@
     $("#spin-button").classList.toggle("is-spinning", busy);
     $("#settings-button").disabled = busy || stale;
     $("#reset-button").disabled = busy || state.draws === 0 || stale;
-    $("#prize-summary").replaceChildren(...state.prizes.map((p) => {
+    $("#history-section").hidden = !showHistory;
+    const visibleHistory = busy ? state.history.slice(1) : state.history;
+    $("#history-empty").hidden = !!visibleHistory.length;
+    $("#history-list").replaceChildren(...visibleHistory.map((h) => {
       const li = document.createElement("li");
-      const name = document.createElement("span"); name.className = "prize-name"; name.textContent = `${p.name}（${colorInfo(p.color)[1]}）`;
-      const count = document.createElement("span"); count.className = "prize-count";
-      const strong = document.createElement("strong"); strong.textContent = p.remaining;
-      count.append(strong, ` / ${p.count} 玉`); li.append(dot(p.color), name, count); return li;
+      const number = document.createElement("span"); number.className = "history-number"; number.textContent = `#${h.number}`;
+      const details = document.createElement("div"); details.className = "history-details";
+      const name = document.createElement("strong"); name.textContent = `${colorInfo(h.color)[1]}・${h.name}`;
+      const time = document.createElement("time"); time.dateTime = h.time; time.textContent = new Date(h.time).toLocaleString("ja-JP");
+      details.append(name, time); li.append(number, dot(h.color), details); return li;
     }));
+    renderRemaining();
     if (!busy) showResult();
   }
+  document.querySelectorAll(".machine-card, .result-box").forEach(box => {
+    box.addEventListener("click", event => {
+      // Child controls keep their own action, including clicks on their icons.
+      if (event.target.closest("button, a, input, select, textarea, label")) return;
+      if (busy || !machine || resultDismissed || !state.history.length || resultShownAt === null || performance.now() - resultShownAt < 1000) return;
+      resultDismissed = true;
+      resultShownAt = null;
+      showResult();
+    });
+  });
   const settingsDialog = $("#settings-dialog");
   function closeSettings() {
     settingsDialog.close();
@@ -103,11 +136,12 @@
     fillEditor();
     $("#settings-error").textContent = "";
   }
-  $("#settings-button").addEventListener("click", () => {
+  $("#settings-button").addEventListener("click", (event) => {
     if (busy || stale) return;
     fillEditor();
     $("#settings-error").textContent = "";
     settingsDialog.showModal();
+    if (event.detail > 0) $("#settings-title").focus({preventScroll: true});
     document.body.classList.add("settings-open");
   });
   $("#settings-cancel").addEventListener("click", closeSettings);
@@ -116,6 +150,35 @@
     const bounds = settingsDialog.getBoundingClientRect();
     if (event.target === settingsDialog && (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom)) closeSettings();
   });
+  const remainingDialog = $("#remaining-dialog");
+  function renderRemaining() {
+    const countDisplay = (remaining, initial) => {
+      const count = document.createElement("span"); count.className = "remaining-count";
+      const value = document.createElement("strong"); value.textContent = remaining.toLocaleString("ja-JP");
+      const denominator = document.createElement("span"); denominator.className = "initial-count"; denominator.textContent = `/${initial.toLocaleString("ja-JP")}玉`;
+      count.append(value, denominator); return count;
+    };
+    $("#remaining-list").replaceChildren(...state.prizes.map(p => {
+      const li = document.createElement("li");
+      const label = document.createElement("span"); label.className = "remaining-prize-name"; label.textContent = p.name;
+      li.append(dot(p.color), label, countDisplay(p.remaining, p.count)); return li;
+    }));
+    $("#remaining-total").replaceChildren(countDisplay(totalRemaining(), state.prizes.reduce((sum, p) => sum + p.count, 0)));
+
+  }
+  $("#remaining-button").addEventListener("click", (event) => {
+    if (busy || !showRemaining) return;
+    renderRemaining(); remainingDialog.showModal();
+    if (event.detail > 0) $("#remaining-title").focus({preventScroll: true});
+    document.body.classList.add("remaining-open");
+  });
+  $("#remaining-close").addEventListener("click", () => remainingDialog.close());
+  remainingDialog.addEventListener("close", () => document.body.classList.remove("remaining-open"));
+  remainingDialog.addEventListener("click", event => {
+    const bounds = remainingDialog.getBoundingClientRect();
+    if (event.target === remainingDialog && (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom)) remainingDialog.close();
+  });
+  ["#show-remaining", "#show-history"].forEach(selector => $(selector).addEventListener("change", () => { draftDirty = true; }));
   // Rejection sampling: every remaining ball has the same chance.
   function randomBelow(limit) {
     const values = new Uint32Array(1);
@@ -130,6 +193,8 @@
     catch { $("#result-text").textContent = "抽選できませんでした。再読み込みしてください"; return; }
     const prize = state.prizes.find((p) => { if (ticket < p.remaining) return true; ticket -= p.remaining; return false; });
     busy = true;
+    resultDismissed = false;
+    resultShownAt = null;
     prize.remaining -= 1;
     state.draws += 1;
     state.history.unshift({prizeId: prize.id, name: prize.name, color: prize.color, number: state.draws, time: new Date().toISOString()});
@@ -174,20 +239,20 @@
       row.remove(); draftDirty = true; updateEditor();
     });
     header.append(number, remove);
-    const nameLabel = document.createElement("label"); nameLabel.append("賞名");
+    const nameLabel = document.createElement("label"); nameLabel.className = "prize-name-field"; nameLabel.append("賞名");
     const name = document.createElement("input"); name.type = "text"; name.className = "prize-title"; name.maxLength = 40; name.required = true; name.value = prize.name; name.placeholder = "例：1等・参加賞"; nameLabel.append(name);
     const fields = document.createElement("div"); fields.className = "field-group";
-    const colorLabel = document.createElement("label"); colorLabel.append("玉の色");
+    const colorLabel = document.createElement("label"); colorLabel.append("玉色");
     const color = document.createElement("select"); color.className = "prize-color";
     COLORS.forEach(([value, text]) => { const option = document.createElement("option"); option.value = value; option.textContent = text; color.append(option); }); color.value = prize.color; colorLabel.append(color);
-    const countLabel = document.createElement("label"); countLabel.append("玉の個数");
+    const countLabel = document.createElement("label"); countLabel.append("個数");
     const count = document.createElement("input"); count.type = "number"; count.className = "prize-quantity"; count.min = "0"; count.max = "9999"; count.step = "1"; count.inputMode = "numeric"; count.required = true; count.value = prize.count; countLabel.append(count);
     fields.append(colorLabel, countLabel); row.append(header, nameLabel, fields);
     row.addEventListener("input", () => { draftDirty = true; $("#settings-error").textContent = ""; updateEditor(); });
     row.addEventListener("change", () => { draftDirty = true; });
     $("#prize-editor").append(row); updateEditor();
   }
-  function fillEditor() { $("#prize-editor").replaceChildren(); state.prizes.forEach(addRow); draftDirty = false; }
+  function fillEditor() { $("#prize-editor").replaceChildren(); state.prizes.forEach(addRow); $("#show-remaining").checked = showRemaining; $("#show-history").checked = showHistory; draftDirty = false; }
   $("#add-prize").addEventListener("click", () => {
     if (document.querySelectorAll(".prize-row").length >= 20) return;
     addRow({id: `prize-${Date.now()}-${crypto.randomUUID ? crypto.randomUUID() : randomBelow(1000000000)}`, name: "", color: COLORS[document.querySelectorAll(".prize-row").length % COLORS.length][0], count: 1});
@@ -202,10 +267,20 @@
     const changed = JSON.stringify(prizes) !== JSON.stringify(state.prizes.map(({id, name, color, count}) => ({id, name, color, count})));
     if (changed && state.draws && !confirm("設定を変更すると、玉の残数を元に戻し、抽選履歴をすべて消します。保存しますか？")) return;
     if (changed) { state = {version: 1, prizes: prizes.map((p) => ({...p, remaining: p.count})), history: [], draws: 0}; }
-    saveState(); closeSettings(); render();
+    showRemaining = $("#show-remaining").checked;
+    showHistory = $("#show-history").checked;
+    if (changed) saveState();
+    saveViewSettings(); closeSettings(); render();
   });
   // Avoid an older tab overwriting a newer draw or settings change.
   window.addEventListener("storage", (event) => {
+    if (event.key === VIEW_SETTINGS_KEY) {
+      ({showRemaining, showHistory} = loadViewSettings());
+      if (!draftDirty) { $("#show-remaining").checked = showRemaining; $("#show-history").checked = showHistory; }
+      render();
+      if (!showRemaining && remainingDialog.open) remainingDialog.close();
+      return;
+    }
     if (event.key !== STORAGE_KEY && event.key !== null) return;
     stale = true; render();
     $("#settings-form").querySelectorAll("button:not(#settings-cancel), input, select").forEach((element) => { element.disabled = true; });

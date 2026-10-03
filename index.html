@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#050505">
   <meta name="description" content="賞と玉の数を設定して、ボタンで回すガラガラ抽選。残数管理・オフライン利用に対応。">
   <title>ガラガラポン | MRS TOOLS</title>
-  <link rel="stylesheet" href="style.css?v=5">
+  <link rel="stylesheet" href="style.css?v=9">
 </head>
 <body>
   <main class="app-shell">
@@ -15,7 +15,7 @@
       <h1>ガラガラポン</h1>
     </header>
     <section id="draw-panel" class="tool-panel machine-card" aria-label="ガラガラ抽選">
-      <span class="remaining-badge">残り <strong id="total-remaining">0</strong> 玉</span>
+      <button id="remaining-button" class="remaining-badge remaining-link" type="button" aria-haspopup="dialog" aria-controls="remaining-dialog">残り <strong id="total-remaining">0</strong> 玉</button>
       <div class="machine-stage" id="machine-stage" aria-hidden="true">
         <p class="machine-loading">3D表示を準備しています…</p>
       </div>
@@ -27,17 +27,23 @@
     <section class="result-box" role="status" aria-live="polite" aria-atomic="true">
       <span class="result-eyebrow">RESULT</span><p id="result-text"></p>
     </section>
-    <ul id="prize-summary" class="prize-summary" aria-label="賞ごとの残りの玉"></ul>
-    <button id="reset-button" class="secondary-button reset-button" type="button">玉を元に戻す</button>
+    <section id="history-section" class="history-section" aria-labelledby="history-title">
+      <h2 id="history-title">抽選履歴</h2>
+      <p id="history-empty" class="empty-message">まだ抽選していません。</p>
+      <ol id="history-list" class="history-list"></ol>
+    </section>
     <p id="storage-message" class="error-message" role="alert" hidden></p>
-    <p class="save-note">設定・残数は、この端末のブラウザに保存されます。</p>
+    <p class="save-note">設定・残数・履歴は、この端末のブラウザに保存されます。</p>
     <footer class="site-footer"><a class="mrs-tools-link" href="https://mrs-tools.pages.dev/" target="_blank" rel="noopener noreferrer">MRS TOOLS</a></footer>
   </main>
   <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-title">
     <div class="modal-handle" aria-hidden="true"></div>
-    <h2 id="settings-title">賞と玉を決める</h2>
+    <h2 id="settings-title" tabindex="-1">賞と玉を決める</h2>
     <p class="panel-description">玉が多い賞ほど出やすくなります。各賞0〜9,999玉、最大20種類まで。</p>
     <form id="settings-form">
+      <label class="display-toggle" for="show-remaining"><span>残玉数表示</span><input id="show-remaining" type="checkbox" role="switch" checked></label>
+      <label class="display-toggle" for="show-history"><span>抽選履歴表示</span><input id="show-history" type="checkbox" role="switch" checked></label>
+      <button id="reset-button" class="secondary-button reset-button" type="button">玉数リセット</button>
       <div id="prize-editor" class="prize-editor"></div>
       <button id="add-prize" type="button" class="secondary-button">＋ 賞を追加</button>
       <p class="settings-total">合計 <strong id="settings-total">0</strong> 玉</p>
@@ -46,7 +52,13 @@
       <div class="modal-actions"><button id="settings-cancel" type="button" class="secondary-button">キャンセル</button><button type="submit" class="primary-button">完了</button></div>
     </form>
   </dialog>
-  <script src="script.js?v=5"></script>
+  <dialog id="remaining-dialog" class="remaining-dialog" aria-labelledby="remaining-title">
+    <h2 id="remaining-title" tabindex="-1">賞ごとの残玉数</h2>
+    <ul id="remaining-list" class="remaining-list"></ul>
+    <p class="remaining-total">合計 <span id="remaining-total"></span></p>
+    <button id="remaining-close" class="secondary-button" type="button">閉じる</button>
+  </dialog>
+  <script src="script.js?v=9"></script>
   <div class="ad-banner" aria-label="広告"><div class="ad-banner-inner"><!-- admax -->
     <script src="https://adm.shinobi.jp/s/8a495d941206bf0c34aff9559f8d2cea"></script>
     <!-- admax --></div></div>

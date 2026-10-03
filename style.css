@@ -50,3 +50,43 @@ body.settings-open{overflow:hidden}
 #spin-button .play-icon{margin-left:4px}
 #spin-button.is-spinning .play-icon{margin-left:0}
 .result-box p{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Full-height settings, remaining-count details, and the draw history. */
+.settings-dialog{inset:0;height:100dvh;max-height:100dvh;border-radius:0;padding-top:max(14px,env(safe-area-inset-top));padding-bottom:max(20px,env(safe-area-inset-bottom))}
+.display-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;color:var(--text);font-size:.95rem}
+.display-toggle input{appearance:none;-webkit-appearance:none;position:relative;display:block;flex-shrink:0;width:52px;min-height:32px;height:32px;margin:0;padding:0;border:1px solid var(--border);border-radius:20px;background:#454545;cursor:pointer}
+.display-toggle input::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff}
+.display-toggle input:checked{background:var(--accent)}
+.display-toggle input:checked::after{left:23px}
+.settings-dialog .reset-button{margin:0 0 18px;color:var(--text);background:var(--surface-strong)}
+.remaining-link{min-height:44px;padding:4px 0;border:0;background:transparent;color:var(--muted);text-decoration:underline;text-underline-offset:4px}
+.machine-card .remaining-link{top:14px}
+.remaining-link:disabled{opacity:1}
+.history-section{margin-top:24px}
+.history-section h2{margin:0 0 6px;font-size:1rem}
+.remaining-dialog{box-sizing:border-box;width:min(360px,calc(100% - 32px));max-height:calc(100dvh - 48px);padding:20px;border:1px solid var(--border);border-radius:18px;background:var(--surface);color:var(--text);overflow-y:auto}
+.remaining-dialog::backdrop{background:rgba(0,0,0,.65)}
+.remaining-dialog h2{margin:0;font-size:1.1rem}
+.remaining-list{list-style:none;padding:0;margin:16px 0}
+.remaining-list li{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--border);font-size:.95rem}
+.remaining-list li span:not(.color-dot){flex:1}
+.remaining-list strong{font-variant-numeric:tabular-nums}
+.remaining-dialog button{width:100%}
+body.remaining-open{overflow:hidden}
+
+/* Compact prize rows keep 44px controls and 16px input text on iPhone. */
+.settings-dialog h2:focus,.remaining-dialog h2:focus{outline:none}
+button:focus:not(:focus-visible){outline:none}
+.settings-dialog .prize-editor{gap:8px}
+.settings-dialog .prize-row{padding:8px 10px}
+.settings-dialog .row-header{margin-bottom:4px;min-height:44px}
+.settings-dialog .row-header .delete-prize{padding:0 4px}
+.settings-dialog .prize-row label{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.settings-dialog .prize-row label input,.settings-dialog .prize-row label select{flex:1;min-width:0;width:0;min-height:44px;margin:0;padding:7px 8px}
+.settings-dialog .field-group{gap:10px;margin-top:8px}
+.remaining-total{display:flex;justify-content:space-between;gap:10px;margin:0 0 18px;color:var(--muted);font-size:.95rem}
+.remaining-total strong{color:var(--text);font-variant-numeric:tabular-nums}
+.remaining-list li .remaining-prize-name{min-width:0;overflow-wrap:anywhere}
+.remaining-count{display:inline-flex;align-items:baseline;gap:3px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.remaining-list li span.remaining-count,.remaining-list li .remaining-count .initial-count{flex:0 0 auto}
+.remaining-count .initial-count{color:var(--muted);font-size:.8rem;font-weight:400}
