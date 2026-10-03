@@ -20,7 +20,7 @@ export function createMachine(stage) {
   const material = (color, metalness = 0, roughness = .7) => new THREE.MeshStandardMaterial({color, metalness, roughness});
   const wood = material(0xc7904e), endWood = material(0xdfaf6f), rimWood = material(0x8b542c);
   const metal = material(0x9ba4a2, .55, .4), trayMetal = material(0xc6cbc4, .3, .6);
-  const gripMaterial = material(0xb96529), dark = material(0x241910);
+  const gripMaterial = material(0xb96529), innerWood = material(0x85572f);
   const mesh = (geometry, mat, parent = scene) => {const m = new THREE.Mesh(geometry, mat); parent.add(m); return m;};
   const box = (size, pos, mat, parent = scene) => {const m = mesh(new THREE.BoxGeometry(...size), mat, parent); m.position.set(...pos); return m;};
   function rod(a, b, radius, mat, parent = scene) {
@@ -46,21 +46,24 @@ export function createMachine(stage) {
   }
   rod([-.79, centerY, 0], [.8, centerY, 0], .055, metal);
   const drum = new THREE.Group(); drum.position.y = centerY; scene.add(drum);
-  const panelHeight = 2 * radius * Math.sin(Math.PI / 8);
+  const panelHeight = 2 * radius * Math.sin(Math.PI / 8) + .002;
+  const ballRadius = .095, holeRadius = ballRadius + .008;
+  // Closed wooden lining stops any view through the drum, including oblique views of the hole.
+  const lining = mesh(new THREE.CylinderGeometry(.66, .66, depth, 8), innerWood, drum);
+  lining.rotation.z = Math.PI / 2;
   const holeAngle = Math.PI / 4;
   for (let i = 0; i < 8; i++) {
     const angle = i * Math.PI / 4;
     const shape = new THREE.Shape();
-    shape.moveTo(-depth / 2, -panelHeight / 2); shape.lineTo(depth / 2, -panelHeight / 2);
-    shape.lineTo(depth / 2, panelHeight / 2); shape.lineTo(-depth / 2, panelHeight / 2); shape.closePath();
-    if (i === 1) {const hole = new THREE.Path(); hole.absarc(0, 0, .132, 0, Math.PI * 2, true); shape.holes.push(hole);}
+    shape.moveTo(-depth / 2 - .001, -panelHeight / 2); shape.lineTo(depth / 2 + .001, -panelHeight / 2);
+    shape.lineTo(depth / 2 + .001, panelHeight / 2); shape.lineTo(-depth / 2 - .001, panelHeight / 2); shape.closePath();
+    if (i === 1) {const hole = new THREE.Path(); hole.absarc(0, 0, holeRadius, 0, Math.PI * 2, true); shape.holes.push(hole);}
     const panel = mesh(new THREE.ExtrudeGeometry(shape, {depth: .045, bevelEnabled: false, curveSegments: 24}), wood, drum);
-    panel.rotation.x = angle; panel.position.set(0, -Math.sin(angle) * apothem, Math.cos(angle) * apothem);
+    panel.rotation.x = angle; panel.position.set(0, -Math.sin(angle) * (apothem - .045), Math.cos(angle) * (apothem - .045));
     if (i === 1) {
-      const ring = mesh(new THREE.RingGeometry(.132, .158, 32), metal, drum);
-      ring.rotation.x = angle; ring.position.set(0, -Math.sin(angle) * (apothem + .048), Math.cos(angle) * (apothem + .048));
-      const recess = mesh(new THREE.CircleGeometry(.134, 32), dark, drum);
-      recess.rotation.x = angle; recess.position.set(0, -Math.sin(angle) * (apothem - .14), Math.cos(angle) * (apothem - .14));
+      const ring = mesh(new THREE.RingGeometry(holeRadius, holeRadius + .018, 32), metal, drum);
+      ring.rotation.x = angle; ring.position.set(0, -Math.sin(angle) * (apothem + .001), Math.cos(angle) * (apothem + .001));
+
     }
   }
   // Flat octagonal end caps; no solid cylinder behind the real side opening.
@@ -74,15 +77,14 @@ export function createMachine(stage) {
     const faceMaterial = mat.clone(); faceMaterial.side = THREE.DoubleSide;
     return mesh(geometry, faceMaterial, drum);
   }
-  endCap(-depth / 2 - .01, radius, rimWood);
-  endCap(depth / 2 + .046, radius, rimWood);
-  endCap(depth / 2 + .05, radius * .94, endWood);
+  endCap(-depth / 2, radius + .001, rimWood);
+  endCap(depth / 2, radius + .001, rimWood);
+  endCap(depth / 2 + .001, radius * .94, endWood);
   const hub = mesh(new THREE.CylinderGeometry(.15, .15, .09, 24), rimWood, drum); hub.rotation.z = Math.PI / 2; hub.position.x = .57;
   const crank = new THREE.Group(); crank.position.set(.81, centerY, 0); scene.add(crank);
   rod([-.2, 0, 0], [0, 0, 0], .045, metal, crank);
   rod([0, 0, 0], [0, .43, 0], .045, metal, crank);
   rod([0, .43, 0], [.29, .43, 0], .065, gripMaterial, crank);
-  const ballRadius = .095;
   const ball = mesh(new THREE.SphereGeometry(ballRadius, 20, 14), material(0xffffff, .12, .3)); ball.visible = false;
   const rest = new THREE.Vector3(-.08, .345 + ballRadius, 1.1);
   const shadowMaterial = new THREE.MeshBasicMaterial({color: 0x242820, transparent: true, opacity: .18, depthWrite: false});
@@ -123,7 +125,7 @@ export function createMachine(stage) {
     ball.material.color.set(color); ball.visible = true;
     if (reduced) {setResult(color); return;}
     const normal = new THREE.Vector3(0, -Math.sin(holeAngle), Math.cos(holeAngle));
-    const inside = normal.clone().multiplyScalar(apothem - .08).add(new THREE.Vector3(0, centerY, 0));
+    const inside = normal.clone().multiplyScalar(apothem - ballRadius - .01).add(new THREE.Vector3(0, centerY, 0));
     const outside = normal.clone().multiplyScalar(apothem + .18).add(new THREE.Vector3(0, centerY, 0));
     // Keep the ball's physical size fixed. The wooden panel occludes it until it exits.
     await animate(180, t => ball.position.lerpVectors(inside, outside, t));
