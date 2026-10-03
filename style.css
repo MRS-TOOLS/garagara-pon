@@ -73,3 +73,16 @@ body.settings-open{overflow:hidden}
 .remaining-list strong{font-variant-numeric:tabular-nums}
 .remaining-dialog button{width:100%}
 body.remaining-open{overflow:hidden}
+
+/* Compact prize rows keep 44px controls and 16px input text on iPhone. */
+.settings-dialog h2:focus,.remaining-dialog h2:focus{outline:none}
+button:focus:not(:focus-visible){outline:none}
+.settings-dialog .prize-editor{gap:8px}
+.settings-dialog .prize-row{padding:8px 10px}
+.settings-dialog .row-header{margin-bottom:4px;min-height:44px}
+.settings-dialog .row-header .delete-prize{padding:0 4px}
+.settings-dialog .prize-row label{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.settings-dialog .prize-row label input,.settings-dialog .prize-row label select{flex:1;min-width:0;width:0;min-height:44px;margin:0;padding:7px 8px}
+.settings-dialog .field-group{gap:10px;margin-top:8px}
+.remaining-total{display:flex;justify-content:space-between;gap:10px;margin:0 0 18px;color:var(--muted);font-size:.95rem}
+.remaining-total strong{color:var(--text);font-variant-numeric:tabular-nums}

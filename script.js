@@ -47,20 +47,20 @@
     return freshState();
   }
   let state = loadState();
-  function loadShowRemaining() {
+  function loadViewSettings() {
     try {
       const saved = JSON.parse(localStorage.getItem(VIEW_SETTINGS_KEY));
-      return typeof saved?.showRemaining === "boolean" ? saved.showRemaining : true;
-    } catch { return true; }
+      return {showRemaining: typeof saved?.showRemaining === "boolean" ? saved.showRemaining : true, showHistory: typeof saved?.showHistory === "boolean" ? saved.showHistory : true};
+    } catch { return {showRemaining: true, showHistory: true}; }
   }
-  let showRemaining = loadShowRemaining();
+  let {showRemaining, showHistory} = loadViewSettings();
   function saveViewSettings() {
-    try { localStorage.setItem(VIEW_SETTINGS_KEY, JSON.stringify({showRemaining})); }
+    try { localStorage.setItem(VIEW_SETTINGS_KEY, JSON.stringify({showRemaining, showHistory})); }
     catch { storageNotice("表示設定を保存できませんでした。再読み込み後に引き継げない場合があります。"); }
   }
   let machine = null;
   let machinePending = true;
-  import('./machine-3d.js?v=6').then(({createMachine}) => {
+  import('./machine-3d.js?v=7').then(({createMachine}) => {
     machine = createMachine($("#machine-stage"));
     machinePending = false;
     render();
@@ -102,6 +102,7 @@
     $("#spin-button").classList.toggle("is-spinning", busy);
     $("#settings-button").disabled = busy || stale;
     $("#reset-button").disabled = busy || state.draws === 0 || stale;
+    $("#history-section").hidden = !showHistory;
     const visibleHistory = busy ? state.history.slice(1) : state.history;
     $("#history-empty").hidden = !!visibleHistory.length;
     $("#history-list").replaceChildren(...visibleHistory.map((h) => {
@@ -122,11 +123,12 @@
     fillEditor();
     $("#settings-error").textContent = "";
   }
-  $("#settings-button").addEventListener("click", () => {
+  $("#settings-button").addEventListener("click", (event) => {
     if (busy || stale) return;
     fillEditor();
     $("#settings-error").textContent = "";
     settingsDialog.showModal();
+    if (event.detail > 0) $("#settings-title").focus({preventScroll: true});
     document.body.classList.add("settings-open");
   });
   $("#settings-cancel").addEventListener("click", closeSettings);
@@ -138,17 +140,23 @@
   const remainingDialog = $("#remaining-dialog");
   function renderRemaining() {
     const counts = new Map();
-    state.prizes.forEach(p => counts.set(p.color, (counts.get(p.color) || 0) + p.remaining));
+    state.prizes.forEach(p => {
+      const total = counts.get(p.color) || {remaining: 0, initial: 0};
+      total.remaining += p.remaining; total.initial += p.count; counts.set(p.color, total);
+    });
     $("#remaining-list").replaceChildren(...COLORS.filter(([color]) => counts.has(color)).map(([color, name]) => {
       const li = document.createElement("li");
       const label = document.createElement("span"); label.textContent = name;
-      const count = document.createElement("strong"); count.textContent = `${counts.get(color).toLocaleString("ja-JP")} 玉`;
+      const count = document.createElement("strong"); count.textContent = `${counts.get(color).remaining.toLocaleString("ja-JP")} / ${counts.get(color).initial.toLocaleString("ja-JP")} 玉`;
       li.append(dot(color), label, count); return li;
     }));
+    $("#remaining-total").textContent = `${totalRemaining().toLocaleString("ja-JP")} / ${state.prizes.reduce((sum, p) => sum + p.count, 0).toLocaleString("ja-JP")} 玉`;
   }
-  $("#remaining-button").addEventListener("click", () => {
+  $("#remaining-button").addEventListener("click", (event) => {
     if (busy || !showRemaining) return;
-    renderRemaining(); remainingDialog.showModal(); document.body.classList.add("remaining-open");
+    renderRemaining(); remainingDialog.showModal();
+    if (event.detail > 0) $("#remaining-title").focus({preventScroll: true});
+    document.body.classList.add("remaining-open");
   });
   $("#remaining-close").addEventListener("click", () => remainingDialog.close());
   remainingDialog.addEventListener("close", () => document.body.classList.remove("remaining-open"));
@@ -156,7 +164,7 @@
     const bounds = remainingDialog.getBoundingClientRect();
     if (event.target === remainingDialog && (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom)) remainingDialog.close();
   });
-  $("#show-remaining").addEventListener("change", () => { draftDirty = true; });
+  ["#show-remaining", "#show-history"].forEach(selector => $(selector).addEventListener("change", () => { draftDirty = true; }));
   // Rejection sampling: every remaining ball has the same chance.
   function randomBelow(limit) {
     const values = new Uint32Array(1);
@@ -215,20 +223,20 @@
       row.remove(); draftDirty = true; updateEditor();
     });
     header.append(number, remove);
-    const nameLabel = document.createElement("label"); nameLabel.append("賞名");
+    const nameLabel = document.createElement("label"); nameLabel.className = "prize-name-field"; nameLabel.append("賞名");
     const name = document.createElement("input"); name.type = "text"; name.className = "prize-title"; name.maxLength = 40; name.required = true; name.value = prize.name; name.placeholder = "例：1等・参加賞"; nameLabel.append(name);
     const fields = document.createElement("div"); fields.className = "field-group";
-    const colorLabel = document.createElement("label"); colorLabel.append("玉の色");
+    const colorLabel = document.createElement("label"); colorLabel.append("玉色");
     const color = document.createElement("select"); color.className = "prize-color";
     COLORS.forEach(([value, text]) => { const option = document.createElement("option"); option.value = value; option.textContent = text; color.append(option); }); color.value = prize.color; colorLabel.append(color);
-    const countLabel = document.createElement("label"); countLabel.append("玉の個数");
+    const countLabel = document.createElement("label"); countLabel.append("個数");
     const count = document.createElement("input"); count.type = "number"; count.className = "prize-quantity"; count.min = "0"; count.max = "9999"; count.step = "1"; count.inputMode = "numeric"; count.required = true; count.value = prize.count; countLabel.append(count);
     fields.append(colorLabel, countLabel); row.append(header, nameLabel, fields);
     row.addEventListener("input", () => { draftDirty = true; $("#settings-error").textContent = ""; updateEditor(); });
     row.addEventListener("change", () => { draftDirty = true; });
     $("#prize-editor").append(row); updateEditor();
   }
-  function fillEditor() { $("#prize-editor").replaceChildren(); state.prizes.forEach(addRow); $("#show-remaining").checked = showRemaining; draftDirty = false; }
+  function fillEditor() { $("#prize-editor").replaceChildren(); state.prizes.forEach(addRow); $("#show-remaining").checked = showRemaining; $("#show-history").checked = showHistory; draftDirty = false; }
   $("#add-prize").addEventListener("click", () => {
     if (document.querySelectorAll(".prize-row").length >= 20) return;
     addRow({id: `prize-${Date.now()}-${crypto.randomUUID ? crypto.randomUUID() : randomBelow(1000000000)}`, name: "", color: COLORS[document.querySelectorAll(".prize-row").length % COLORS.length][0], count: 1});
@@ -244,14 +252,15 @@
     if (changed && state.draws && !confirm("設定を変更すると、玉の残数を元に戻し、抽選履歴をすべて消します。保存しますか？")) return;
     if (changed) { state = {version: 1, prizes: prizes.map((p) => ({...p, remaining: p.count})), history: [], draws: 0}; }
     showRemaining = $("#show-remaining").checked;
+    showHistory = $("#show-history").checked;
     if (changed) saveState();
     saveViewSettings(); closeSettings(); render();
   });
   // Avoid an older tab overwriting a newer draw or settings change.
   window.addEventListener("storage", (event) => {
     if (event.key === VIEW_SETTINGS_KEY) {
-      showRemaining = loadShowRemaining();
-      if (!draftDirty) $("#show-remaining").checked = showRemaining;
+      ({showRemaining, showHistory} = loadViewSettings());
+      if (!draftDirty) { $("#show-remaining").checked = showRemaining; $("#show-history").checked = showHistory; }
       render();
       if (!showRemaining && remainingDialog.open) remainingDialog.close();
       return;
