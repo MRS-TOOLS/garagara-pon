@@ -46,6 +46,72 @@
     return freshState();
   }
   let state = loadState();
+  // Orthographic projection keeps the axle fixed while the eight drum faces turn.
+  // The front is nearer/right; the cylinder extends back toward the left.
+  const svgElement = (tag) => document.createElementNS("http://www.w3.org/2000/svg", tag);
+  const sides = Array.from({length: 8}, () => {
+    const face = svgElement("polygon");
+    $("#drum-sides").append(face);
+    return face;
+  });
+  const grain = Array.from({length: 5}, () => {
+    const line = svgElement("line");
+    $("#drum-grain").append(line);
+    return line;
+  });
+  const project = (x, y, z) => ({x: 192 + .85 * x + .65 * y, y: 126 + .25 * x - .2 * y + z});
+  const points = (vertices) => vertices.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(" ");
+  function drawMachine(angle) {
+    const vertices = (x, radius) => Array.from({length: 8}, (_, index) => {
+      const theta = -Math.PI / 2 + Math.PI / 8 + index * Math.PI / 4 + angle;
+      return project(x, Math.cos(theta) * radius, Math.sin(theta) * radius);
+    });
+    const front = vertices(48, 82);
+    const back = vertices(-48, 82);
+    sides.forEach((face, index) => {
+      const next = (index + 1) % 8;
+      const theta = -Math.PI / 2 + Math.PI / 8 + (index + .5) * Math.PI / 4 + angle;
+      const facing = -.85 * Math.cos(theta) - .32 * Math.sin(theta);
+      face.setAttribute("points", points([back[index], front[index], front[next], back[next]]));
+      face.setAttribute("visibility", facing > 0 ? "visible" : "hidden");
+      const light = Math.round(55 + 12 * (-Math.sin(theta)));
+      face.setAttribute("fill", `hsl(35 55% ${light}%)`);
+    });
+    $("#drum-front").setAttribute("points", points(front));
+    $("#drum-rim").setAttribute("points", points(vertices(48, 73)));
+    grain.forEach((line, index) => {
+      const y = (index - 2) * 25;
+      const z = Math.sqrt(68 * 68 - y * y);
+      const turn = (depth) => project(48, y * Math.cos(angle) - depth * Math.sin(angle), y * Math.sin(angle) + depth * Math.cos(angle));
+      const a = turn(-z), b = turn(z);
+      line.setAttribute("x1", a.x); line.setAttribute("y1", a.y);
+      line.setAttribute("x2", b.x); line.setAttribute("y2", b.y);
+    });
+    const theta = 2.5 + angle;
+    const outlet = project(-48, 82 * Math.cos(theta), 82 * Math.sin(theta));
+    $("#drum-outlet").setAttribute("transform", `translate(${outlet.x - 104} ${outlet.y - 179})`);
+    $("#drum-outlet").setAttribute("visibility", -.85 * Math.cos(theta) - .32 * Math.sin(theta) > 0 ? "visible" : "hidden");
+    const hub = project(48, 0, 0), pivot = project(78, 0, 0);
+    const handleAngle = angle - Math.PI / 2;
+    const tip = project(78, 44 * Math.cos(handleAngle), 44 * Math.sin(handleAngle));
+    const grip = project(110, 44 * Math.cos(handleAngle), 44 * Math.sin(handleAngle));
+    const path = `M${hub.x} ${hub.y}L${pivot.x} ${pivot.y}L${tip.x} ${tip.y}L${grip.x} ${grip.y}`;
+    $("#crank-arm").setAttribute("d", path);
+    $("#crank-highlight").setAttribute("d", path);
+    $("#crank-grip").setAttribute("transform", `translate(${grip.x - 297} ${grip.y - 85})`);
+  }
+  function turnMachine(reduced) {
+    if (reduced) return;
+    const start = performance.now();
+    function frame(now) {
+      const progress = Math.min(1, (now - start) / 2200);
+      const eased = progress < .5 ? 4 * progress ** 3 : 1 - (-2 * progress + 2) ** 3 / 2;
+      drawMachine(eased * Math.PI * 6);
+      if (progress < 1) window.requestAnimationFrame(frame);
+    }
+    window.requestAnimationFrame(frame);
+  }
+  drawMachine(0);
   function saveState() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); storageNotice(""); }
     catch { storageNotice("端末に保存できませんでした。現在の画面では使えますが、再読み込みすると今回の変更が失われる場合があります。"); }
@@ -63,6 +129,7 @@
     $("#result-label").textContent = latest ? `第${latest.number}回 · ${colorInfo(latest.color)[1]}玉` : "準備できました";
     $("#result-text").textContent = latest ? latest.name : "何が出るかな？";
     $("#drawn-ball").hidden = !latest;
+    $("#ball-shadow").hidden = !latest;
     if (latest) $("#drawn-ball").style.setProperty("--ball-color", colorInfo(latest.color)[2]);
   }
   function render() {
@@ -123,11 +190,11 @@
     render();
     $("#result-label").textContent = "ガラガラ、ガラガラ…";
     $("#result-text").textContent = "何が出るかな？";
-    const ball = $("#drawn-ball"); ball.hidden = true; ball.classList.remove("drop");
-    $("#machine-stage").classList.add("spinning");
+    const ball = $("#drawn-ball"); ball.hidden = true; $("#ball-shadow").hidden = true; ball.classList.remove("drop");
     const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    turnMachine(reduced);
     window.setTimeout(() => {
-      $("#machine-stage").classList.remove("spinning");
+      drawMachine(0);
       ball.style.setProperty("--ball-color", colorInfo(prize.color)[2]); ball.hidden = false; ball.classList.add("drop");
       showResult();
       window.setTimeout(() => { busy = false; render(); if (stale) storageNotice("別のタブでデータが変更されました。再読み込みしてから続けてください。"); }, reduced ? 0 : 650);
