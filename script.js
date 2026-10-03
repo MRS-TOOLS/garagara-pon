@@ -46,119 +46,17 @@
     return freshState();
   }
   let state = loadState();
-  // Orthographic projection keeps the axle fixed while the eight drum faces turn.
-  // The front is nearer/right; the cylinder extends back toward the left.
-  const svgElement = (tag) => document.createElementNS("http://www.w3.org/2000/svg", tag);
-  const sides = Array.from({length: 8}, () => {
-    const face = svgElement("polygon");
-    $("#drum-sides").append(face);
-    return face;
+  let machine = null;
+  let machinePending = true;
+  import('./machine-3d.js?v=4').then(({createMachine}) => {
+    machine = createMachine($("#machine-stage"));
+    machinePending = false;
+    render();
+  }).catch(() => {
+    machinePending = false;
+    $("#machine-stage").textContent = "この端末では3D表示を開始できませんでした。再読み込みしてください。";
+    render();
   });
-  const grain = Array.from({length: 5}, () => {
-    const line = svgElement("line");
-    $("#drum-grain").append(line);
-    return line;
-  });
-  const project = (x, y, z) => ({x: 192 + .85 * x + .65 * y, y: 126 + .25 * x - .2 * y + z});
-  const points = (vertices) => vertices.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(" ");
-  function drawMachine(angle) {
-    const vertices = (x, radius) => Array.from({length: 8}, (_, index) => {
-      const theta = -Math.PI / 2 + Math.PI / 8 + index * Math.PI / 4 + angle;
-      return project(x, Math.cos(theta) * radius, Math.sin(theta) * radius);
-    });
-    const front = vertices(48, 82);
-    const back = vertices(-48, 82);
-    sides.forEach((face, index) => {
-      const next = (index + 1) % 8;
-      const theta = -Math.PI / 2 + Math.PI / 8 + (index + .5) * Math.PI / 4 + angle;
-      const facing = -.85 * Math.cos(theta) - .32 * Math.sin(theta);
-      face.setAttribute("points", points([back[index], front[index], front[next], back[next]]));
-      face.setAttribute("visibility", facing > 0 ? "visible" : "hidden");
-      const light = Math.round(55 + 12 * (-Math.sin(theta)));
-      face.setAttribute("fill", `hsl(35 55% ${light}%)`);
-    });
-    $("#drum-front").setAttribute("points", points(front));
-    $("#drum-rim").setAttribute("points", points(vertices(48, 73)));
-    grain.forEach((line, index) => {
-      const y = (index - 2) * 25;
-      const z = Math.sqrt(68 * 68 - y * y);
-      const turn = (depth) => project(48, y * Math.cos(angle) - depth * Math.sin(angle), y * Math.sin(angle) + depth * Math.cos(angle));
-      const a = turn(-z), b = turn(z);
-      line.setAttribute("x1", a.x); line.setAttribute("y1", a.y);
-      line.setAttribute("x2", b.x); line.setAttribute("y2", b.y);
-    });
-    // Project the opening onto the rotating side, including its rim and lip.
-    const theta = 2.5 + angle;
-    const surface = (x, offset, radius = 83) => project(x, radius * Math.cos(theta + offset), radius * Math.sin(theta + offset));
-    const outline = (width, arc) => Array.from({length: 24}, (_, i) => {
-      const t = i / 24 * Math.PI * 2;
-      return surface(-28 + width * Math.cos(t), arc * Math.sin(t));
-    });
-    const closedPath = (vertices) => `M${vertices.map((p) => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join("L")}Z`;
-    $("#outlet-rim").setAttribute("d", closedPath(outline(14, .16)));
-    $("#outlet-hole").setAttribute("d", closedPath(outline(10, .115)));
-    $("#outlet-lip").setAttribute("d", closedPath([
-      surface(-39, -.10), surface(-17, -.10),
-      surface(-17, -.22, 89), surface(-39, -.22, 89)
-    ]));
-    $("#drum-outlet").setAttribute("visibility", -.85 * Math.cos(theta) - .32 * Math.sin(theta) > 0 ? "visible" : "hidden");
-    const hub = project(48, 0, 0), pivot = project(78, 0, 0);
-    const handleAngle = angle - Math.PI / 2;
-    const tip = project(78, 44 * Math.cos(handleAngle), 44 * Math.sin(handleAngle));
-    const grip = project(110, 44 * Math.cos(handleAngle), 44 * Math.sin(handleAngle));
-    const path = `M${hub.x} ${hub.y}L${pivot.x} ${pivot.y}L${tip.x} ${tip.y}L${grip.x} ${grip.y}`;
-    $("#crank-arm").setAttribute("d", path);
-    $("#crank-highlight").setAttribute("d", path);
-    $("#crank-grip").setAttribute("transform", `translate(${grip.x - 297} ${grip.y - 85})`);
-  }
-  function setBallVisible(visible) {
-    // SVG elements do not share HTMLElement.hidden; toggle the attribute itself.
-    $("#drawn-ball").toggleAttribute("hidden", !visible);
-    $("#ball-shadow").toggleAttribute("hidden", !visible);
-  }
-  function turnMachine(reduced) {
-    if (reduced) { drawMachine(0); return Promise.resolve(); }
-    return new Promise((resolve) => {
-      const start = performance.now();
-      function frame(now) {
-        const progress = Math.min(1, (now - start) / 2200);
-        const eased = progress < .5 ? 4 * progress ** 3 : 1 - (-2 * progress + 2) ** 3 / 2;
-        drawMachine(eased * Math.PI * 6);
-        if (progress < 1) window.requestAnimationFrame(frame);
-        else { drawMachine(0); resolve(); }
-      }
-      window.requestAnimationFrame(frame);
-    });
-  }
-  function releaseBall(reduced) {
-    const ball = $("#drawn-ball"), shadow = $("#ball-shadow");
-    const mouth = project(-28, 89 * Math.cos(2.28), 89 * Math.sin(2.28));
-    const stages = [
-      [0, mouth.x, mouth.y, .55], [.16, mouth.x, mouth.y + 5, 1],
-      [.55, 127, 242, 1], [.73, 128, 232, 1],
-      [.87, 127, 242, 1], [.94, 128, 239, 1], [1, 129, 242, 1]
-    ];
-    setBallVisible(true);
-    if (reduced) { ball.removeAttribute("transform"); shadow.style.opacity = ""; return Promise.resolve(); }
-    return new Promise((resolve) => {
-      const start = performance.now();
-      function frame(now) {
-        const progress = Math.min(1, (now - start) / 800);
-        const index = stages.findIndex((s, i) => i < stages.length - 1 && progress <= stages[i + 1][0]);
-        const a = stages[Math.max(0, index)], b = stages[Math.max(0, index) + 1];
-        let t = (progress - a[0]) / (b[0] - a[0]);
-        if (index === 1) t *= t; // Gravity speeds up the free fall.
-        const x = a[1] + (b[1] - a[1]) * t, y = a[2] + (b[2] - a[2]) * t;
-        const scale = a[3] + (b[3] - a[3]) * t;
-        ball.setAttribute("transform", `translate(${x} ${y}) scale(${scale}) translate(-129 -242)`);
-        shadow.style.opacity = String(.18 * Math.max(0, Math.min(1, (y - 210) / 32)));
-        if (progress < 1) window.requestAnimationFrame(frame);
-        else { ball.removeAttribute("transform"); shadow.style.opacity = ""; resolve(); }
-      }
-      window.requestAnimationFrame(frame);
-    });
-  }
-  drawMachine(0);
   function saveState() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); storageNotice(""); }
     catch { storageNotice("端末に保存できませんでした。現在の画面では使えますが、再読み込みすると今回の変更が失われる場合があります。"); }
@@ -175,15 +73,15 @@
     const latest = state.history[0];
     $("#result-label").textContent = latest ? `第${latest.number}回 · ${colorInfo(latest.color)[1]}玉` : "準備できました";
     $("#result-text").textContent = latest ? latest.name : "何が出るかな？";
-    setBallVisible(!!latest);
-    if (latest) $("#drawn-ball").style.setProperty("--ball-color", colorInfo(latest.color)[2]);
+    machine?.setResult(latest ? colorInfo(latest.color)[2] : null);
+    if (!machinePending && !machine) { $("#result-label").textContent = "3D表示を開始できませんでした"; $("#result-text").textContent = "再読み込みしてください"; }
   }
   function render() {
     const total = totalRemaining();
     $("#total-remaining").textContent = total.toLocaleString("ja-JP");
     $("#draw-count").textContent = state.draws.toLocaleString("ja-JP");
-    $("#spin-button").disabled = busy || !total || stale;
-    $("#spin-button").textContent = busy ? "抽選中…" : total ? "まわす ↻" : "すべての玉が出ました";
+    $("#spin-button").disabled = busy || !total || stale || !machine;
+    $("#spin-button").textContent = busy ? "抽選中…" : machinePending ? "3D表示を準備中…" : !machine ? "3D表示を利用できません" : total ? "まわす ↻" : "すべての玉が出ました";
     $("#reset-button").disabled = busy || state.draws === 0 || stale;
     document.querySelectorAll(".tab").forEach((button) => { button.disabled = busy; });
     $("#prize-summary").replaceChildren(...state.prizes.map((p) => {
@@ -221,7 +119,7 @@
     return values[0] % limit;
   }
   $("#spin-button").addEventListener("click", async () => {
-    if (busy || stale || totalRemaining() === 0) return;
+    if (busy || stale || !machine || totalRemaining() === 0) return;
     let ticket;
     try { ticket = randomBelow(totalRemaining()); }
     catch { $("#result-label").textContent = "抽選できませんでした"; $("#result-text").textContent = "ページを再読み込みしてください"; return; }
@@ -236,13 +134,9 @@
     render();
     $("#result-label").textContent = "ガラガラ、ガラガラ…";
     $("#result-text").textContent = "何が出るかな？";
-    const ball = $("#drawn-ball");
-    setBallVisible(false);
-    ball.removeAttribute("transform");
     const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    await turnMachine(reduced);
-    ball.style.setProperty("--ball-color", colorInfo(prize.color)[2]);
-    await releaseBall(reduced);
+    try { await machine.spin(colorInfo(prize.color)[2], reduced); }
+    catch { storageNotice("3D演出を表示できませんでした。抽選結果は保存されています。"); }
     busy = false;
     render();
     if (stale) storageNotice("別のタブでデータが変更されました。再読み込みしてから続けてください。");
@@ -250,7 +144,7 @@
   $("#reset-button").addEventListener("click", () => {
     if (busy || stale || !state.draws || !confirm("玉を元の個数に戻し、抽選履歴をすべて消します。賞の設定は残ります。よろしいですか？")) return;
     state.prizes.forEach((p) => { p.remaining = p.count; }); state.history = []; state.draws = 0;
-    $("#drawn-ball").removeAttribute("transform"); saveState(); render();
+    saveState(); render();
   });
   function updateEditor() {
     const rows = [...document.querySelectorAll(".prize-row")];
@@ -302,7 +196,7 @@
     if (prizes.reduce((sum, p) => sum + p.count, 0) === 0) { $("#settings-error").textContent = "合計1玉以上にしてください。"; return; }
     const changed = JSON.stringify(prizes) !== JSON.stringify(state.prizes.map(({id, name, color, count}) => ({id, name, color, count})));
     if (changed && state.draws && !confirm("設定を変更すると、玉の残数を元に戻し、抽選履歴をすべて消します。保存しますか？")) return;
-    if (changed) { state = {version: 1, prizes: prizes.map((p) => ({...p, remaining: p.count})), history: [], draws: 0}; $("#drawn-ball").removeAttribute("transform"); }
+    if (changed) { state = {version: 1, prizes: prizes.map((p) => ({...p, remaining: p.count})), history: [], draws: 0}; }
     saveState(); fillEditor(); render(); switchPanel("draw-panel");
   });
   // Avoid an older tab overwriting a newer draw or settings change.
