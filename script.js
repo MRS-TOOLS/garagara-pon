@@ -47,6 +47,8 @@
     return freshState();
   }
   let state = loadState();
+  let resultDismissed = false;
+  let resultShownAt = null;
   function loadViewSettings() {
     try {
       const saved = JSON.parse(localStorage.getItem(VIEW_SETTINGS_KEY));
@@ -60,7 +62,7 @@
   }
   let machine = null;
   let machinePending = true;
-  import('./machine-3d.js?v=8').then(({createMachine}) => {
+  import('./machine-3d.js?v=9').then(({createMachine}) => {
     machine = createMachine($("#machine-stage"));
     machinePending = false;
     render();
@@ -82,7 +84,8 @@
     return element;
   }
   function showResult() {
-    const latest = state.history[0];
+    const latest = resultDismissed ? null : state.history[0];
+    if (latest && resultShownAt === null) resultShownAt = performance.now();
     $("#result-text").textContent = latest ? `${colorInfo(latest.color)[1]}・${latest.name}` : "";
     $("#result-text").classList.toggle("has-result", !!latest);
     machine?.setResult(latest ? colorInfo(latest.color)[2] : null);
@@ -116,6 +119,16 @@
     renderRemaining();
     if (!busy) showResult();
   }
+  document.querySelectorAll(".machine-card, .result-box").forEach(box => {
+    box.addEventListener("click", event => {
+      // Child controls keep their own action, including clicks on their icons.
+      if (event.target.closest("button, a, input, select, textarea, label")) return;
+      if (busy || !machine || resultDismissed || !state.history.length || resultShownAt === null || performance.now() - resultShownAt < 1000) return;
+      resultDismissed = true;
+      resultShownAt = null;
+      showResult();
+    });
+  });
   const settingsDialog = $("#settings-dialog");
   function closeSettings() {
     settingsDialog.close();
@@ -180,6 +193,8 @@
     catch { $("#result-text").textContent = "抽選できませんでした。再読み込みしてください"; return; }
     const prize = state.prizes.find((p) => { if (ticket < p.remaining) return true; ticket -= p.remaining; return false; });
     busy = true;
+    resultDismissed = false;
+    resultShownAt = null;
     prize.remaining -= 1;
     state.draws += 1;
     state.history.unshift({prizeId: prize.id, name: prize.name, color: prize.color, number: state.draws, time: new Date().toISOString()});

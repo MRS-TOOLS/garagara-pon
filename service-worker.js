@@ -1,7 +1,7 @@
 "use strict";
 const CACHE_PREFIX = "mrs-garagara-pon-";
-const CACHE_NAME = `${CACHE_PREFIX}v8`;
-const APP_FILES = ["./", "./index.html", "./style.css?v=8", "./script.js?v=8", "./machine-3d.js?v=8", "./assets/vendor/three.module.min.js", "./assets/vendor/three.core.min.js"].map((path) => new URL(path, self.registration.scope).href);
+const CACHE_NAME = `${CACHE_PREFIX}v9`;
+const APP_FILES = ["./", "./index.html", "./style.css?v=9", "./script.js?v=9", "./machine-3d.js?v=9", "./assets/vendor/three.module.min.js", "./assets/vendor/three.core.min.js"].map((path) => new URL(path, self.registration.scope).href);
 const OFFLINE_PAGE = new URL("./index.html", self.registration.scope).href;
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_FILES)).then(() => self.skipWaiting()));
