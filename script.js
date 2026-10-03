@@ -46,6 +46,17 @@
     return freshState();
   }
   let state = loadState();
+  let machine = null;
+  let machinePending = true;
+  import('./machine-3d.js?v=5').then(({createMachine}) => {
+    machine = createMachine($("#machine-stage"));
+    machinePending = false;
+    render();
+  }).catch(() => {
+    machinePending = false;
+    $("#machine-stage").textContent = "この端末では3D表示を開始できませんでした。再読み込みしてください。";
+    render();
+  });
   function saveState() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); storageNotice(""); }
     catch { storageNotice("端末に保存できませんでした。現在の画面では使えますが、再読み込みすると今回の変更が失われる場合があります。"); }
@@ -60,19 +71,22 @@
   }
   function showResult() {
     const latest = state.history[0];
-    $("#result-label").textContent = latest ? `第${latest.number}回 · ${colorInfo(latest.color)[1]}玉` : "準備できました";
-    $("#result-text").textContent = latest ? latest.name : "何が出るかな？";
-    $("#drawn-ball").hidden = !latest;
-    if (latest) $("#drawn-ball").style.setProperty("--ball-color", colorInfo(latest.color)[2]);
+    $("#result-text").textContent = latest ? `${colorInfo(latest.color)[1]}・${latest.name}` : "";
+    $("#result-text").classList.toggle("has-result", !!latest);
+    machine?.setResult(latest ? colorInfo(latest.color)[2] : null);
+    if (!machinePending && !machine) $("#result-text").textContent = "3D表示を開始できませんでした。再読み込みしてください";
   }
+
   function render() {
     const total = totalRemaining();
     $("#total-remaining").textContent = total.toLocaleString("ja-JP");
-    $("#draw-count").textContent = state.draws.toLocaleString("ja-JP");
-    $("#spin-button").disabled = busy || !total || stale;
-    $("#spin-button").textContent = busy ? "抽選中…" : total ? "まわす ↻" : "すべての玉が出ました";
+    $("#spin-button").disabled = busy || !total || stale || !machine;
+    const spinLabel = busy ? "抽選中" : machinePending ? "3D表示を準備中" : !machine ? "3D表示を利用できません" : total ? "抽選をスタート" : "すべての玉が出ました";
+    $("#spin-button").setAttribute("aria-label", spinLabel);
+    $("#spin-button").title = spinLabel;
+    $("#spin-button").classList.toggle("is-spinning", busy);
+    $("#settings-button").disabled = busy || stale;
     $("#reset-button").disabled = busy || state.draws === 0 || stale;
-    document.querySelectorAll(".tab").forEach((button) => { button.disabled = busy; });
     $("#prize-summary").replaceChildren(...state.prizes.map((p) => {
       const li = document.createElement("li");
       const name = document.createElement("span"); name.className = "prize-name"; name.textContent = `${p.name}（${colorInfo(p.color)[1]}）`;
@@ -80,26 +94,28 @@
       const strong = document.createElement("strong"); strong.textContent = p.remaining;
       count.append(strong, ` / ${p.count} 玉`); li.append(dot(p.color), name, count); return li;
     }));
-    $("#history-empty").hidden = !!state.history.length;
-    $("#history-list").replaceChildren(...state.history.map((h) => {
-      const li = document.createElement("li");
-      const number = document.createElement("span"); number.className = "history-number"; number.textContent = `#${h.number}`;
-      const details = document.createElement("div"); details.className = "history-details";
-      const name = document.createElement("strong"); name.textContent = `${h.name}（${colorInfo(h.color)[1]}玉）`;
-      const time = document.createElement("time"); time.dateTime = h.time; time.textContent = new Date(h.time).toLocaleString("ja-JP");
-      details.append(name, time); li.append(number, dot(h.color), details); return li;
-    }));
     if (!busy) showResult();
   }
-  function switchPanel(id) {
-    document.querySelectorAll(".tool-panel").forEach((panel) => { panel.hidden = panel.id !== id; });
-    document.querySelectorAll(".tab").forEach((button) => {
-      const active = button.dataset.panel === id;
-      button.classList.toggle("active", active);
-      if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
-    });
+  const settingsDialog = $("#settings-dialog");
+  function closeSettings() {
+    settingsDialog.close();
+    document.body.classList.remove("settings-open");
+    fillEditor();
+    $("#settings-error").textContent = "";
   }
-  document.querySelectorAll(".tab").forEach((button) => button.addEventListener("click", () => { if (!busy) switchPanel(button.dataset.panel); }));
+  $("#settings-button").addEventListener("click", () => {
+    if (busy || stale) return;
+    fillEditor();
+    $("#settings-error").textContent = "";
+    settingsDialog.showModal();
+    document.body.classList.add("settings-open");
+  });
+  $("#settings-cancel").addEventListener("click", closeSettings);
+  settingsDialog.addEventListener("cancel", event => { event.preventDefault(); closeSettings(); });
+  settingsDialog.addEventListener("click", event => {
+    const bounds = settingsDialog.getBoundingClientRect();
+    if (event.target === settingsDialog && (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom)) closeSettings();
+  });
   // Rejection sampling: every remaining ball has the same chance.
   function randomBelow(limit) {
     const values = new Uint32Array(1);
@@ -107,11 +123,11 @@
     do { crypto.getRandomValues(values); } while (values[0] >= boundary);
     return values[0] % limit;
   }
-  $("#spin-button").addEventListener("click", () => {
-    if (busy || stale || totalRemaining() === 0) return;
+  $("#spin-button").addEventListener("click", async () => {
+    if (busy || stale || !machine || totalRemaining() === 0) return;
     let ticket;
     try { ticket = randomBelow(totalRemaining()); }
-    catch { $("#result-label").textContent = "抽選できませんでした"; $("#result-text").textContent = "ページを再読み込みしてください"; return; }
+    catch { $("#result-text").textContent = "抽選できませんでした。再読み込みしてください"; return; }
     const prize = state.prizes.find((p) => { if (ticket < p.remaining) return true; ticket -= p.remaining; return false; });
     busy = true;
     prize.remaining -= 1;
@@ -121,22 +137,19 @@
     // Commit the result before animation, so reload never restores a drawn ball.
     saveState();
     render();
-    $("#result-label").textContent = "ガラガラ、ガラガラ…";
-    $("#result-text").textContent = "何が出るかな？";
-    const ball = $("#drawn-ball"); ball.hidden = true; ball.classList.remove("drop");
-    $("#machine-stage").classList.add("spinning");
+    $("#result-text").textContent = "抽選中…";
+    $("#result-text").classList.remove("has-result");
     const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    window.setTimeout(() => {
-      $("#machine-stage").classList.remove("spinning");
-      ball.style.setProperty("--ball-color", colorInfo(prize.color)[2]); ball.hidden = false; ball.classList.add("drop");
-      showResult();
-      window.setTimeout(() => { busy = false; render(); if (stale) storageNotice("別のタブでデータが変更されました。再読み込みしてから続けてください。"); }, reduced ? 0 : 650);
-    }, reduced ? 50 : 2200);
+    try { await machine.spin(colorInfo(prize.color)[2], reduced); }
+    catch { storageNotice("3D演出を表示できませんでした。抽選結果は保存されています。"); }
+    busy = false;
+    render();
+    if (stale) storageNotice("別のタブでデータが変更されました。再読み込みしてから続けてください。");
   });
   $("#reset-button").addEventListener("click", () => {
     if (busy || stale || !state.draws || !confirm("玉を元の個数に戻し、抽選履歴をすべて消します。賞の設定は残ります。よろしいですか？")) return;
     state.prizes.forEach((p) => { p.remaining = p.count; }); state.history = []; state.draws = 0;
-    $("#drawn-ball").classList.remove("drop"); saveState(); render();
+    saveState(); render();
   });
   function updateEditor() {
     const rows = [...document.querySelectorAll(".prize-row")];
@@ -188,14 +201,14 @@
     if (prizes.reduce((sum, p) => sum + p.count, 0) === 0) { $("#settings-error").textContent = "合計1玉以上にしてください。"; return; }
     const changed = JSON.stringify(prizes) !== JSON.stringify(state.prizes.map(({id, name, color, count}) => ({id, name, color, count})));
     if (changed && state.draws && !confirm("設定を変更すると、玉の残数を元に戻し、抽選履歴をすべて消します。保存しますか？")) return;
-    if (changed) { state = {version: 1, prizes: prizes.map((p) => ({...p, remaining: p.count})), history: [], draws: 0}; $("#drawn-ball").classList.remove("drop"); }
-    saveState(); fillEditor(); render(); switchPanel("draw-panel");
+    if (changed) { state = {version: 1, prizes: prizes.map((p) => ({...p, remaining: p.count})), history: [], draws: 0}; }
+    saveState(); closeSettings(); render();
   });
   // Avoid an older tab overwriting a newer draw or settings change.
   window.addEventListener("storage", (event) => {
     if (event.key !== STORAGE_KEY && event.key !== null) return;
     stale = true; render();
-    $("#settings-form").querySelectorAll("button, input, select").forEach((element) => { element.disabled = true; });
+    $("#settings-form").querySelectorAll("button:not(#settings-cancel), input, select").forEach((element) => { element.disabled = true; });
     storageNotice("別のタブでデータが変更されました。再読み込みしてから続けてください。");
   });
   window.addEventListener("beforeunload", (event) => { if (draftDirty) { event.preventDefault(); event.returnValue = ""; } });
