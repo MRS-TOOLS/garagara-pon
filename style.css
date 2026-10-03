@@ -86,3 +86,7 @@ button:focus:not(:focus-visible){outline:none}
 .settings-dialog .field-group{gap:10px;margin-top:8px}
 .remaining-total{display:flex;justify-content:space-between;gap:10px;margin:0 0 18px;color:var(--muted);font-size:.95rem}
 .remaining-total strong{color:var(--text);font-variant-numeric:tabular-nums}
+.remaining-list li .remaining-prize-name{min-width:0;overflow-wrap:anywhere}
+.remaining-count{display:inline-flex;align-items:baseline;gap:3px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.remaining-list li span.remaining-count,.remaining-list li .remaining-count .initial-count{flex:0 0 auto}
+.remaining-count .initial-count{color:var(--muted);font-size:.8rem;font-weight:400}

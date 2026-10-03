@@ -60,7 +60,7 @@
   }
   let machine = null;
   let machinePending = true;
-  import('./machine-3d.js?v=7').then(({createMachine}) => {
+  import('./machine-3d.js?v=8').then(({createMachine}) => {
     machine = createMachine($("#machine-stage"));
     machinePending = false;
     render();
@@ -94,7 +94,7 @@
     $("#total-remaining").textContent = total.toLocaleString("ja-JP");
     $("#remaining-button").hidden = !showRemaining;
     $("#remaining-button").disabled = busy;
-    $("#remaining-button").setAttribute("aria-label", `残り${total.toLocaleString("ja-JP")}玉。色別の残数を表示`);
+    $("#remaining-button").setAttribute("aria-label", `残り${total.toLocaleString("ja-JP")}玉。賞ごとの残数を表示`);
     $("#spin-button").disabled = busy || !total || stale || !machine;
     const spinLabel = busy ? "抽選中" : machinePending ? "3D表示を準備中" : !machine ? "3D表示を利用できません" : total ? "抽選をスタート" : "すべての玉が出ました";
     $("#spin-button").setAttribute("aria-label", spinLabel);
@@ -139,18 +139,19 @@
   });
   const remainingDialog = $("#remaining-dialog");
   function renderRemaining() {
-    const counts = new Map();
-    state.prizes.forEach(p => {
-      const total = counts.get(p.color) || {remaining: 0, initial: 0};
-      total.remaining += p.remaining; total.initial += p.count; counts.set(p.color, total);
-    });
-    $("#remaining-list").replaceChildren(...COLORS.filter(([color]) => counts.has(color)).map(([color, name]) => {
+    const countDisplay = (remaining, initial) => {
+      const count = document.createElement("span"); count.className = "remaining-count";
+      const value = document.createElement("strong"); value.textContent = remaining.toLocaleString("ja-JP");
+      const denominator = document.createElement("span"); denominator.className = "initial-count"; denominator.textContent = `/${initial.toLocaleString("ja-JP")}玉`;
+      count.append(value, denominator); return count;
+    };
+    $("#remaining-list").replaceChildren(...state.prizes.map(p => {
       const li = document.createElement("li");
-      const label = document.createElement("span"); label.textContent = name;
-      const count = document.createElement("strong"); count.textContent = `${counts.get(color).remaining.toLocaleString("ja-JP")} / ${counts.get(color).initial.toLocaleString("ja-JP")} 玉`;
-      li.append(dot(color), label, count); return li;
+      const label = document.createElement("span"); label.className = "remaining-prize-name"; label.textContent = p.name;
+      li.append(dot(p.color), label, countDisplay(p.remaining, p.count)); return li;
     }));
-    $("#remaining-total").textContent = `${totalRemaining().toLocaleString("ja-JP")} / ${state.prizes.reduce((sum, p) => sum + p.count, 0).toLocaleString("ja-JP")} 玉`;
+    $("#remaining-total").replaceChildren(countDisplay(totalRemaining(), state.prizes.reduce((sum, p) => sum + p.count, 0)));
+
   }
   $("#remaining-button").addEventListener("click", (event) => {
     if (busy || !showRemaining) return;
