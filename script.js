@@ -87,9 +87,20 @@
       line.setAttribute("x1", a.x); line.setAttribute("y1", a.y);
       line.setAttribute("x2", b.x); line.setAttribute("y2", b.y);
     });
+    // Project the opening onto the rotating side, including its rim and lip.
     const theta = 2.5 + angle;
-    const outlet = project(-48, 82 * Math.cos(theta), 82 * Math.sin(theta));
-    $("#drum-outlet").setAttribute("transform", `translate(${outlet.x - 104} ${outlet.y - 179})`);
+    const surface = (x, offset, radius = 83) => project(x, radius * Math.cos(theta + offset), radius * Math.sin(theta + offset));
+    const outline = (width, arc) => Array.from({length: 24}, (_, i) => {
+      const t = i / 24 * Math.PI * 2;
+      return surface(-28 + width * Math.cos(t), arc * Math.sin(t));
+    });
+    const closedPath = (vertices) => `M${vertices.map((p) => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join("L")}Z`;
+    $("#outlet-rim").setAttribute("d", closedPath(outline(14, .16)));
+    $("#outlet-hole").setAttribute("d", closedPath(outline(10, .115)));
+    $("#outlet-lip").setAttribute("d", closedPath([
+      surface(-39, -.10), surface(-17, -.10),
+      surface(-17, -.22, 89), surface(-39, -.22, 89)
+    ]));
     $("#drum-outlet").setAttribute("visibility", -.85 * Math.cos(theta) - .32 * Math.sin(theta) > 0 ? "visible" : "hidden");
     const hub = project(48, 0, 0), pivot = project(78, 0, 0);
     const handleAngle = angle - Math.PI / 2;
@@ -100,16 +111,52 @@
     $("#crank-highlight").setAttribute("d", path);
     $("#crank-grip").setAttribute("transform", `translate(${grip.x - 297} ${grip.y - 85})`);
   }
+  function setBallVisible(visible) {
+    // SVG elements do not share HTMLElement.hidden; toggle the attribute itself.
+    $("#drawn-ball").toggleAttribute("hidden", !visible);
+    $("#ball-shadow").toggleAttribute("hidden", !visible);
+  }
   function turnMachine(reduced) {
-    if (reduced) return;
-    const start = performance.now();
-    function frame(now) {
-      const progress = Math.min(1, (now - start) / 2200);
-      const eased = progress < .5 ? 4 * progress ** 3 : 1 - (-2 * progress + 2) ** 3 / 2;
-      drawMachine(eased * Math.PI * 6);
-      if (progress < 1) window.requestAnimationFrame(frame);
-    }
-    window.requestAnimationFrame(frame);
+    if (reduced) { drawMachine(0); return Promise.resolve(); }
+    return new Promise((resolve) => {
+      const start = performance.now();
+      function frame(now) {
+        const progress = Math.min(1, (now - start) / 2200);
+        const eased = progress < .5 ? 4 * progress ** 3 : 1 - (-2 * progress + 2) ** 3 / 2;
+        drawMachine(eased * Math.PI * 6);
+        if (progress < 1) window.requestAnimationFrame(frame);
+        else { drawMachine(0); resolve(); }
+      }
+      window.requestAnimationFrame(frame);
+    });
+  }
+  function releaseBall(reduced) {
+    const ball = $("#drawn-ball"), shadow = $("#ball-shadow");
+    const mouth = project(-28, 89 * Math.cos(2.28), 89 * Math.sin(2.28));
+    const stages = [
+      [0, mouth.x, mouth.y, .55], [.16, mouth.x, mouth.y + 5, 1],
+      [.55, 127, 242, 1], [.73, 128, 232, 1],
+      [.87, 127, 242, 1], [.94, 128, 239, 1], [1, 129, 242, 1]
+    ];
+    setBallVisible(true);
+    if (reduced) { ball.removeAttribute("transform"); shadow.style.opacity = ""; return Promise.resolve(); }
+    return new Promise((resolve) => {
+      const start = performance.now();
+      function frame(now) {
+        const progress = Math.min(1, (now - start) / 800);
+        const index = stages.findIndex((s, i) => i < stages.length - 1 && progress <= stages[i + 1][0]);
+        const a = stages[Math.max(0, index)], b = stages[Math.max(0, index) + 1];
+        let t = (progress - a[0]) / (b[0] - a[0]);
+        if (index === 1) t *= t; // Gravity speeds up the free fall.
+        const x = a[1] + (b[1] - a[1]) * t, y = a[2] + (b[2] - a[2]) * t;
+        const scale = a[3] + (b[3] - a[3]) * t;
+        ball.setAttribute("transform", `translate(${x} ${y}) scale(${scale}) translate(-129 -242)`);
+        shadow.style.opacity = String(.18 * Math.max(0, Math.min(1, (y - 210) / 32)));
+        if (progress < 1) window.requestAnimationFrame(frame);
+        else { ball.removeAttribute("transform"); shadow.style.opacity = ""; resolve(); }
+      }
+      window.requestAnimationFrame(frame);
+    });
   }
   drawMachine(0);
   function saveState() {
@@ -128,8 +175,7 @@
     const latest = state.history[0];
     $("#result-label").textContent = latest ? `第${latest.number}回 · ${colorInfo(latest.color)[1]}玉` : "準備できました";
     $("#result-text").textContent = latest ? latest.name : "何が出るかな？";
-    $("#drawn-ball").hidden = !latest;
-    $("#ball-shadow").hidden = !latest;
+    setBallVisible(!!latest);
     if (latest) $("#drawn-ball").style.setProperty("--ball-color", colorInfo(latest.color)[2]);
   }
   function render() {
@@ -174,7 +220,7 @@
     do { crypto.getRandomValues(values); } while (values[0] >= boundary);
     return values[0] % limit;
   }
-  $("#spin-button").addEventListener("click", () => {
+  $("#spin-button").addEventListener("click", async () => {
     if (busy || stale || totalRemaining() === 0) return;
     let ticket;
     try { ticket = randomBelow(totalRemaining()); }
@@ -190,20 +236,21 @@
     render();
     $("#result-label").textContent = "ガラガラ、ガラガラ…";
     $("#result-text").textContent = "何が出るかな？";
-    const ball = $("#drawn-ball"); ball.hidden = true; $("#ball-shadow").hidden = true; ball.classList.remove("drop");
+    const ball = $("#drawn-ball");
+    setBallVisible(false);
+    ball.removeAttribute("transform");
     const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    turnMachine(reduced);
-    window.setTimeout(() => {
-      drawMachine(0);
-      ball.style.setProperty("--ball-color", colorInfo(prize.color)[2]); ball.hidden = false; ball.classList.add("drop");
-      showResult();
-      window.setTimeout(() => { busy = false; render(); if (stale) storageNotice("別のタブでデータが変更されました。再読み込みしてから続けてください。"); }, reduced ? 0 : 650);
-    }, reduced ? 50 : 2200);
+    await turnMachine(reduced);
+    ball.style.setProperty("--ball-color", colorInfo(prize.color)[2]);
+    await releaseBall(reduced);
+    busy = false;
+    render();
+    if (stale) storageNotice("別のタブでデータが変更されました。再読み込みしてから続けてください。");
   });
   $("#reset-button").addEventListener("click", () => {
     if (busy || stale || !state.draws || !confirm("玉を元の個数に戻し、抽選履歴をすべて消します。賞の設定は残ります。よろしいですか？")) return;
     state.prizes.forEach((p) => { p.remaining = p.count; }); state.history = []; state.draws = 0;
-    $("#drawn-ball").classList.remove("drop"); saveState(); render();
+    $("#drawn-ball").removeAttribute("transform"); saveState(); render();
   });
   function updateEditor() {
     const rows = [...document.querySelectorAll(".prize-row")];
@@ -255,7 +302,7 @@
     if (prizes.reduce((sum, p) => sum + p.count, 0) === 0) { $("#settings-error").textContent = "合計1玉以上にしてください。"; return; }
     const changed = JSON.stringify(prizes) !== JSON.stringify(state.prizes.map(({id, name, color, count}) => ({id, name, color, count})));
     if (changed && state.draws && !confirm("設定を変更すると、玉の残数を元に戻し、抽選履歴をすべて消します。保存しますか？")) return;
-    if (changed) { state = {version: 1, prizes: prizes.map((p) => ({...p, remaining: p.count})), history: [], draws: 0}; $("#drawn-ball").classList.remove("drop"); }
+    if (changed) { state = {version: 1, prizes: prizes.map((p) => ({...p, remaining: p.count})), history: [], draws: 0}; $("#drawn-ball").removeAttribute("transform"); }
     saveState(); fillEditor(); render(); switchPanel("draw-panel");
   });
   // Avoid an older tab overwriting a newer draw or settings change.
