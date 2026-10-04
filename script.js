@@ -62,7 +62,7 @@
   }
   let machine = null;
   let machinePending = true;
-  import('./machine-3d.js?v=9').then(({createMachine}) => {
+  import('./machine-3d.js?v=10').then(({createMachine}) => {
     machine = createMachine($("#machine-stage"));
     machinePending = false;
     render();
@@ -86,7 +86,9 @@
   function showResult() {
     const latest = resultDismissed ? null : state.history[0];
     if (latest && resultShownAt === null) resultShownAt = performance.now();
-    $("#result-text").textContent = latest ? `${colorInfo(latest.color)[1]}・${latest.name}` : "";
+    $("#result-text").textContent = latest ? `${colorInfo(latest.color)[1]}・${latest.name}` : totalRemaining() ? "待機中" : "残玉なし";
+    $("#result-reset-button").hidden = !!latest || totalRemaining() > 0;
+    $("#result-reset-button").disabled = busy || stale || state.draws === 0;
     $("#result-text").classList.toggle("has-result", !!latest);
     machine?.setResult(latest ? colorInfo(latest.color)[2] : null);
     if (!machinePending && !machine) $("#result-text").textContent = "3D表示を開始できませんでした。再読み込みしてください";
@@ -141,7 +143,7 @@
     fillEditor();
     $("#settings-error").textContent = "";
     settingsDialog.showModal();
-    if (event.detail > 0) $("#settings-title").focus({preventScroll: true});
+    if (event.detail > 0) settingsDialog.focus({preventScroll: true});
     document.body.classList.add("settings-open");
   });
   $("#settings-cancel").addEventListener("click", closeSettings);
@@ -211,11 +213,14 @@
     render();
     if (stale) storageNotice("別のタブでデータが変更されました。再読み込みしてから続けてください。");
   });
-  $("#reset-button").addEventListener("click", () => {
+  function resetBalls() {
     if (busy || stale || !state.draws || !confirm("玉を元の個数に戻し、抽選履歴をすべて消します。賞の設定は残ります。よろしいですか？")) return;
     state.prizes.forEach((p) => { p.remaining = p.count; }); state.history = []; state.draws = 0;
+    resultDismissed = false; resultShownAt = null;
     saveState(); render();
-  });
+  }
+  $("#reset-button").addEventListener("click", resetBalls);
+  $("#result-reset-button").addEventListener("click", resetBalls);
   function updateEditor() {
     const rows = [...document.querySelectorAll(".prize-row")];
     let total = 0;

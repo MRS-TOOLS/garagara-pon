@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#050505">
   <meta name="description" content="賞と玉の数を設定して、ボタンで回すガラガラ抽選。残数管理・オフライン利用に対応。">
   <title>ガラガラポン | MRS TOOLS</title>
-  <link rel="stylesheet" href="style.css?v=9">
+  <link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
   <main class="app-shell">
@@ -25,7 +25,8 @@
       <button id="spin-button" class="circle-button spin-button" type="button" disabled aria-label="抽選をスタート"><span class="play-icon" aria-hidden="true"></span></button>
     </section>
     <section class="result-box" role="status" aria-live="polite" aria-atomic="true">
-      <span class="result-eyebrow">RESULT</span><p id="result-text"></p>
+      <span class="result-eyebrow">RESULT</span>
+      <div class="result-content"><p id="result-text">待機中</p><button id="result-reset-button" class="secondary-button" type="button" hidden>玉数リセット</button></div>
     </section>
     <section id="history-section" class="history-section" aria-labelledby="history-title">
       <h2 id="history-title">抽選履歴</h2>
@@ -36,10 +37,8 @@
     <p class="save-note">設定・残数・履歴は、この端末のブラウザに保存されます。</p>
     <footer class="site-footer"><a class="mrs-tools-link" href="https://mrs-tools.pages.dev/" target="_blank" rel="noopener noreferrer">MRS TOOLS</a></footer>
   </main>
-  <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-title">
+  <dialog id="settings-dialog" class="settings-dialog" aria-label="設定" tabindex="-1">
     <div class="modal-handle" aria-hidden="true"></div>
-    <h2 id="settings-title" tabindex="-1">賞と玉を決める</h2>
-    <p class="panel-description">玉が多い賞ほど出やすくなります。各賞0〜9,999玉、最大20種類まで。</p>
     <form id="settings-form">
       <label class="display-toggle" for="show-remaining"><span>残玉数表示</span><input id="show-remaining" type="checkbox" role="switch" checked></label>
       <label class="display-toggle" for="show-history"><span>抽選履歴表示</span><input id="show-history" type="checkbox" role="switch" checked></label>
@@ -58,7 +57,7 @@
     <p class="remaining-total">合計 <span id="remaining-total"></span></p>
     <button id="remaining-close" class="secondary-button" type="button">閉じる</button>
   </dialog>
-  <script src="script.js?v=9"></script>
+  <script src="script.js?v=10"></script>
   <div class="ad-banner" aria-label="広告"><div class="ad-banner-inner"><!-- admax -->
     <script src="https://adm.shinobi.jp/s/8a495d941206bf0c34aff9559f8d2cea"></script>
     <!-- admax --></div></div>
