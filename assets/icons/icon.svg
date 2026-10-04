@@ -4,8 +4,8 @@
     <path d="M231 82h98l69 69v98l-69 69h-98l-69-69v-98z" fill="#fff"/>
     <path d="M280 200 231 82l-69 69zM280 200l49-118 69 69zM280 200l118 49-69 69zM280 200l-118 49 69 69z" fill="#ef8523"/>
     <path d="M231 82 280 200l49-118M162 151l118 49 118-49M162 249l118-49 118 49M231 318l49-118 49 118" fill="none"/>
-    <path d="M120 384h128v18H120z" fill="#fff"/>
-    <path d="M280 200 356 402h-25l-21-56h-60l-21 56h-25z M280 266l-22 58h44z" fill="#fff" fill-rule="evenodd"/>
+    <path d="M262 200h36v182h-36z" fill="#fff"/>
+    <path d="M120 382h272v18H120z" fill="#fff" stroke="none"/>
     <circle cx="148" cy="337" r="18" fill="#ef8523"/>
   </g>
 </svg>
