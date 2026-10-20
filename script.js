@@ -62,7 +62,13 @@
   }
   let machine = null;
   let machinePending = true;
-  import('./machine-3d.js?v=10').then(({createMachine}) => {
+  let machineLoadTimer;
+  Promise.race([
+    import('./machine-3d.js?v=10'),
+    new Promise((_, reject) => {
+      machineLoadTimer = setTimeout(() => reject(new Error("3D読み込みがタイムアウトしました。")), 8000);
+    })
+  ]).then(({createMachine}) => {
     machine = createMachine($("#machine-stage"));
     machinePending = false;
     render();
@@ -70,7 +76,7 @@
     machinePending = false;
     $("#machine-stage").textContent = "この端末では3D表示を開始できませんでした。再読み込みしてください。";
     render();
-  });
+  }).finally(() => clearTimeout(machineLoadTimer));
   function saveState() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); storageNotice(""); }
     catch { storageNotice("端末に保存できませんでした。現在の画面では使えますが、再読み込みすると今回の変更が失われる場合があります。"); }
@@ -293,7 +299,7 @@
   });
   window.addEventListener("beforeunload", (event) => { if (draftDirty) { event.preventDefault(); event.returnValue = ""; } });
   fillEditor(); render();
-  if ("serviceWorker" in navigator) window.addEventListener("load", () => {
+  if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./service-worker.js", {updateViaCache: "none"}).catch(() => { console.warn("オフライン機能を準備できませんでした。"); });
-  });
+  }
 })();
